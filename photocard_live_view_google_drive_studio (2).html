@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Photocard Live View 4:3 & Google Drive Auto-Sync</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#fdf4ff',
+              500: '#d946ef',
+              600: '#c026d3',
+              700: '#a21caf',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Strict 4:3 Landscape Aspect Ratio */
+    .aspect-4-3 {
+      aspect-ratio: 4 / 3;
+    }
+    /* Photobooth Flash Animation */
+    @keyframes boothFlash {
+      0% { opacity: 0.95; }
+      100% { opacity: 0; }
+    }
+    .flash-triggered {
+      animation: boothFlash 0.3s ease-out forwards;
+    }
+    /* Camera Expand / Fullscreen Theatre Mode */
+    .camera-expanded {
+      position: fixed !important;
+      inset: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      z-index: 9999 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      border: none !important;
+      background: #050507 !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+      padding: env(safe-area-inset-top, 14px) env(safe-area-inset-right, 14px) env(safe-area-inset-bottom, 14px) env(safe-area-inset-left, 14px) !important;
+      box-shadow: none !important;
+    }
+    .camera-expanded .camera-viewport-container {
+      flex: 1 1 auto;
+      max-height: calc(100vh - 120px) !important;
+      max-width: min(calc(100vw - 28px), calc((100vh - 120px) * 4 / 3)) !important;
+      width: 100% !important;
+      margin: auto !important;
+      border-radius: 1rem !important;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+    .camera-expanded .camera-bottom-bar {
+      border-radius: 1rem;
+      max-width: 820px;
+      margin: 0 auto;
+      width: 100%;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #09090b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #27272a;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #3f3f46;
+    }
+  </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen flex flex-col font-sans antialiased selection:bg-fuchsia-500 selection:text-white pb-24">
+
+  <!-- ================= 1. NAVIGASI ATAS (TOP BAR) ================= -->
+  <header class="bg-zinc-900/95 backdrop-blur-md border-b border-zinc-800 sticky top-0 z-30 px-3 sm:px-5 py-2.5 shadow-lg">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- BRAND & ACARA -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-fuchsia-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-fuchsia-500/20">
+          <i class="fa-solid fa-camera-retro text-base"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-xs sm:text-sm tracking-tight text-white flex items-center gap-2">
+            Gelar Karya Mahasiswa 2026
+            <span class="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20">4:3</span>
+          </h1>
+          <p class="text-[11px] text-zinc-400 flex items-center gap-1.5 font-medium">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            Folder: <span class="text-zinc-300">Gelar_Karya_Mahasiswa_2026</span>
+          </p>
+        </div>
+      </div>
+
+      <!-- KONTROL FOTO LIVE & TIMER -->
+      <div class="flex flex-wrap items-center gap-2">
+        
+        <!-- FOTO LIVE CONTROLS -->
+        <div class="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800">
+          <!-- Live Indicator Badge -->
+          <span class="px-2 py-1 text-[10px] font-bold text-rose-400 flex items-center gap-1 border-r border-zinc-800 pr-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span> LIVE
+          </span>
+          <!-- Switch Camera -->
+          <button id="btnSwitchCamera" class="w-7 h-7 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white flex items-center justify-center transition" title="Ganti Kamera Depan/Belakang">
+            <i class="fa-solid fa-camera-rotate text-xs"></i>
+          </button>
+          <!-- Toggle Mirror -->
+          <button id="btnToggleMirror" class="px-2 py-1 rounded-lg hover:bg-zinc-800 text-[11px] font-medium text-zinc-300 hover:text-white transition flex items-center gap-1" title="Balik Cermin">
+            <i class="fa-solid fa-arrows-left-right text-xs text-sky-400"></i>
+            <span id="mirrorStatusText" class="hidden md:inline">Mirror: ON</span>
+          </button>
+          <!-- Toggle Rotate -->
+          <button id="btnToggleRotate" class="px-2 py-1 rounded-lg hover:bg-zinc-800 text-[11px] font-medium text-zinc-300 hover:text-white transition flex items-center gap-1" title="Rotasi Kamera">
+            <i class="fa-solid fa-arrows-rotate text-xs text-amber-400"></i>
+            <span id="rotateStatusText" class="hidden sm:inline">Auto</span>
+            <span id="badgeRotationText" class="text-[10px] text-amber-300 font-mono">0°</span>
+          </button>
+          <!-- Expand Fullscreen -->
+          <button id="btnToggleExpandCamera" class="px-2 py-1 rounded-lg hover:bg-zinc-800 text-[11px] font-semibold text-fuchsia-400 transition flex items-center gap-1" title="Perbesar Layar Penuh">
+            <i id="expandIcon" class="fa-solid fa-expand text-xs"></i>
+            <span id="expandStatusText" class="hidden sm:inline">Perbesar</span>
+          </button>
+        </div>
+
+        <!-- TIMER SELECTOR -->
+        <div class="flex items-center gap-1 bg-zinc-950/80 p-1 rounded-xl border border-zinc-800 text-xs">
+          <span class="px-1.5 text-zinc-400 font-medium text-[11px] flex items-center gap-1">
+            <i class="fa-regular fa-clock text-[10px] text-fuchsia-400"></i>
+            <span class="hidden lg:inline">Timer:</span>
+          </span>
+          <button class="timer-btn px-2 py-0.5 rounded-lg font-semibold bg-zinc-800 text-white text-[11px]" data-seconds="0">Off</button>
+          <button class="timer-btn px-2 py-0.5 rounded-lg font-semibold text-zinc-400 hover:text-white text-[11px]" data-seconds="3">3s</button>
+          <button class="timer-btn px-2 py-0.5 rounded-lg font-semibold text-zinc-400 hover:text-white text-[11px]" data-seconds="5">5s</button>
+        </div>
+
+        <!-- TOMBOL GALERI SESI INI -->
+        <button id="btnOpenGalleryModal" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gradient-to-r from-zinc-800 to-zinc-800/90 hover:bg-zinc-700 text-xs font-bold text-white border border-zinc-700 hover:border-fuchsia-500/50 transition shadow-sm" title="Buka Galeri Sesi Ini">
+          <i class="fa-solid fa-images text-fuchsia-400 text-sm"></i>
+          <span class="hidden sm:inline">GALERI SESI INI</span>
+          <span id="sessionCountBadge" class="px-1.5 py-0.2 rounded-full bg-fuchsia-600 text-[10px] font-extrabold text-white min-w-[18px] text-center">0</span>
+        </button>
+
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= 2. WORKSPACE TENGAH (FOTO LIVE 4:3) ================= -->
+  <main class="flex-1 max-w-5xl w-full mx-auto p-3 sm:p-5 flex flex-col items-center justify-center gap-4">
+    
+    <!-- 4:3 Camera Container (Expandable) -->
+    <div id="cameraCardContainer" class="relative w-full bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col transition-all duration-200">
+      
+      <!-- Top Live Badges -->
+      <div class="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+        <div class="flex items-center gap-2">
+          <span class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-semibold text-zinc-300 border border-white/10 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+            LIVE 4:3 LANDSCAPE
+          </span>
+          <span id="driveStatusIndicator" class="bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-semibold text-amber-400 border border-white/10 flex items-center gap-1.5 hidden">
+            <i class="fa-solid fa-circle-notch fa-spin text-[9px]"></i> Mengunggah ke Drive...
+          </span>
+        </div>
+      </div>
+
+      <!-- 4:3 Aspect Ratio Viewport -->
+      <div id="cameraViewportBox" class="camera-viewport-container w-full aspect-4-3 relative bg-black flex items-center justify-center overflow-hidden">
+        
+        <!-- Live Video Feed -->
+        <video id="videoPreview" autoplay playsinline muted class="w-full h-full object-cover transition-transform duration-300 pointer-events-none" style="transform: scaleX(-1);"></video>
+
+        <!-- Live Watermark Overlay -->
+        <div id="watermarkLiveOverlay" class="absolute inset-0 pointer-events-none z-20 flex items-center justify-center p-0 hidden">
+          <img id="watermarkPreviewImg" src="" alt="Watermark Overlay" class="w-full h-full object-contain pointer-events-none" />
+        </div>
+
+        <!-- Photobooth Flash Effect -->
+        <div id="cameraFlash" class="absolute inset-0 bg-white opacity-0 pointer-events-none z-30"></div>
+
+        <!-- Countdown Visual Overlay -->
+        <div id="countdownBox" class="absolute inset-0 flex items-center justify-center bg-black/60 backdrop-blur-xs z-25 hidden">
+          <span id="countdownNumber" class="text-8xl sm:text-9xl font-black text-white drop-shadow-[0_10px_25px_rgba(0,0,0,0.9)] animate-pulse">3</span>
+        </div>
+
+        <!-- Camera Initialization Prompt -->
+        <div id="cameraPrompt" class="absolute inset-0 bg-zinc-950 flex flex-col items-center justify-center p-6 text-center z-15">
+          <div class="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-3 shadow-inner">
+            <i class="fa-solid fa-video-slash text-2xl"></i>
+          </div>
+          <h3 class="font-bold text-base text-zinc-200 mb-1">Kamera Belum Terhubung</h3>
+          <p class="text-xs text-zinc-400 max-w-sm mb-4">Pastikan browser mengizinkan akses webcam untuk mengaktifkan live view 4:3 landscape.</p>
+          <button id="btnStartCamera" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white font-semibold text-xs tracking-wide shadow-lg shadow-fuchsia-600/30 transition flex items-center gap-2">
+            <i class="fa-solid fa-video"></i> Izinkan & Mulai Kamera
+          </button>
+        </div>
+      </div>
+
+      <!-- Shutter Bar (Center Bottom of Viewport) -->
+      <div class="camera-bottom-bar p-3.5 bg-zinc-900/95 border-t border-zinc-800 flex items-center justify-between gap-3">
+        <!-- Sound Toggle -->
+        <button id="btnToggleSound" class="px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs border border-zinc-700 flex items-center gap-1.5 transition">
+          <i id="soundIcon" class="fa-solid fa-volume-high text-fuchsia-400"></i>
+          <span id="soundText" class="text-[11px] font-medium hidden sm:inline">Suara: ON</span>
+        </button>
+
+        <!-- Main Shutter Button -->
+        <button id="btnCapturePhoto" class="group relative flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-gradient-to-tr from-fuchsia-600 to-pink-500 hover:from-fuchsia-500 hover:to-pink-400 text-white shadow-xl shadow-fuchsia-500/30 hover:scale-105 active:scale-95 transition" title="Ambil Foto (Shutter)">
+          <div class="w-11 h-11 sm:w-13 sm:h-13 rounded-full border-2 border-white/80 flex items-center justify-center">
+            <i class="fa-solid fa-camera text-lg sm:text-xl group-hover:scale-110 transition"></i>
+          </div>
+        </button>
+
+        <!-- Quick Info / Status -->
+        <div class="text-right">
+          <span class="text-[10px] text-zinc-400 block font-medium">Resolusi HD</span>
+          <span class="text-[11px] text-zinc-200 font-bold">1600 × 1200 (4:3)</span>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ================= 3. NAVIGASI BAWAH (RIBBON BOTTOM) ================= -->
+  <footer class="fixed bottom-0 inset-x-0 z-40 bg-zinc-900/95 backdrop-blur-lg border-t border-zinc-800 shadow-[0_-10px_25px_rgba(0,0,0,0.6)] px-3 sm:px-6 py-2.5">
+    <div class="max-w-4xl mx-auto flex items-center justify-between gap-3">
+      
+      <!-- ITEM 1: WATERMARK PNG -->
+      <button id="btnRibbonWatermark" class="flex-1 flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2 rounded-xl bg-zinc-800/90 hover:bg-zinc-700/90 border border-zinc-700 hover:border-fuchsia-500/50 transition group">
+        <div class="w-8 h-8 rounded-lg bg-fuchsia-500/20 text-fuchsia-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition">
+          <i class="fa-solid fa-stamp text-sm"></i>
+        </div>
+        <div class="text-left overflow-hidden">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold text-white tracking-wide uppercase">WATERMARK PNG</span>
+            <span id="ribbonWatermarkBadge" class="text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-zinc-700 text-zinc-300">Off</span>
+          </div>
+          <p id="ribbonWatermarkName" class="text-[10px] text-zinc-400 truncate max-w-[140px] sm:max-w-[200px]">Tarik & lepas file PNG</p>
+        </div>
+      </button>
+
+      <!-- ITEM 2: SINKRONISASI GOOGLE DRIVE -->
+      <button id="btnRibbonDrive" class="flex-1 flex items-center justify-center sm:justify-start gap-2.5 px-3 py-2 rounded-xl bg-zinc-800/90 hover:bg-zinc-700/90 border border-zinc-700 hover:border-emerald-500/50 transition group">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition">
+          <i class="fa-brands fa-google-drive text-base"></i>
+        </div>
+        <div class="text-left overflow-hidden">
+          <div class="flex items-center gap-1.5">
+            <span class="text-xs font-bold text-white tracking-wide uppercase">SINKRONISASI GOOGLE DRIVE</span>
+            <span id="ribbonDriveBadge" class="text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Siap</span>
+          </div>
+          <p class="text-[10px] text-zinc-400 truncate max-w-[140px] sm:max-w-[200px]">Folder: Gelar_Karya_Mahasiswa_2026</p>
+        </div>
+      </button>
+
+    </div>
+  </footer>
+
+  <!-- ================= DRAWER / SHEET: WATERMARK PNG ================= -->
+  <div id="drawerWatermark" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden animate-in fade-in duration-200">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-5 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom duration-200">
+      
+      <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-fuchsia-600/20 text-fuchsia-400 flex items-center justify-center">
+            <i class="fa-solid fa-stamp text-sm"></i>
+          </div>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide uppercase">Pengaturan Watermark PNG</h2>
+            <p class="text-[10px] text-zinc-400">Tarik & lepas file PNG transparan untuk live feed</p>
+          </div>
+        </div>
+        <button id="btnCloseWatermarkDrawer" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Toggle Watermark Aktif -->
+      <div class="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-zinc-800">
+        <span class="text-xs text-zinc-300 font-semibold flex items-center gap-1.5">
+          <i class="fa-solid fa-eye text-fuchsia-400"></i> Aktifkan Watermark di Live Feed & Foto
+        </span>
+        <label class="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" id="checkWatermarkEnabled" checked class="sr-only peer">
+          <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-fuchsia-600"></div>
+        </label>
+      </div>
+
+      <!-- Drag & Drop File Zone -->
+      <div id="dropZoneWatermark" class="border-2 border-dashed border-zinc-700 hover:border-fuchsia-500 rounded-xl p-5 bg-zinc-950/70 text-center cursor-pointer transition flex flex-col items-center justify-center gap-2">
+        <input type="file" id="watermarkFileInput" accept="image/png, image/webp" class="hidden" />
+        <div class="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-fuchsia-400">
+          <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+        </div>
+        <div>
+          <p class="text-xs font-bold text-zinc-200">Tarik & Lepas File PNG di Sini</p>
+          <p class="text-[11px] text-zinc-400 mt-0.5">atau <span class="text-fuchsia-400 underline font-semibold">klik untuk memilih berkas</span></p>
+        </div>
+        <span class="text-[10px] text-zinc-500">Mendukung format PNG transparan (Rasio 4:3 disarankan)</span>
+      </div>
+
+      <!-- Active Watermark File Status & Delete Button -->
+      <div id="activeWatermarkInfo" class="hidden p-3 rounded-xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5 overflow-hidden">
+          <div class="w-10 h-10 rounded-lg bg-zinc-900 border border-zinc-700 flex-shrink-0 overflow-hidden flex items-center justify-center p-0.5">
+            <img id="thumbWatermarkPreview" src="" alt="Thumbnail" class="w-full h-full object-contain" />
+          </div>
+          <div class="truncate">
+            <p id="watermarkFileName" class="text-xs font-semibold text-zinc-200 truncate">watermark.png</p>
+            <p class="text-[10px] text-emerald-400 flex items-center gap-1 font-medium">
+              <i class="fa-solid fa-circle-check"></i> Terpasang di live feed 4:3
+            </p>
+          </div>
+        </div>
+        <button id="btnRemoveWatermark" class="px-3 py-1.5 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-900/40 text-xs font-semibold flex items-center gap-1 transition flex-shrink-0" title="Hapus Watermark">
+          <i class="fa-solid fa-trash-can text-xs"></i> Hapus
+        </button>
+      </div>
+
+      <div class="pt-2 flex justify-end">
+        <button id="btnDoneWatermarkDrawer" class="px-5 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold transition">
+          Selesai
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= DRAWER / SHEET: SINKRONISASI GOOGLE DRIVE ================= -->
+  <div id="drawerDrive" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 hidden animate-in fade-in duration-200">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-t-2xl sm:rounded-2xl max-w-xl w-full p-5 shadow-2xl flex flex-col gap-4 animate-in slide-in-from-bottom duration-200">
+      
+      <div class="flex items-center justify-between border-b border-zinc-800 pb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
+            <i class="fa-brands fa-google-drive text-base"></i>
+          </div>
+          <div>
+            <h2 class="text-xs font-bold text-white tracking-wide uppercase">Sinkronisasi Google Drive</h2>
+            <p class="text-[10px] text-emerald-400 font-medium">Otomatis Tersimpan di Folder Target</p>
+          </div>
+        </div>
+        <button id="btnCloseDriveDrawer" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Target Destination Card -->
+      <div class="bg-zinc-950 border border-zinc-800 rounded-xl p-3.5 flex flex-col gap-2.5 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-zinc-400 flex items-center gap-1.5 font-medium">
+            <i class="fa-regular fa-envelope text-zinc-400 text-xs"></i> Akun Tujuan:
+          </span>
+          <span class="font-semibold text-zinc-200">haqiqisalman23@gmail.com</span>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-zinc-800/80 pt-2">
+          <span class="text-zinc-400 flex items-center gap-1.5 font-medium">
+            <i class="fa-solid fa-folder text-amber-400 text-xs"></i> Folder Target:
+          </span>
+          <a href="https://drive.google.com/drive/folders/1yXSfxRKoqjbr2Y5doG_57WtZxsxvQIss" target="_blank" rel="noopener noreferrer" class="font-semibold text-emerald-400 hover:underline flex items-center gap-1" title="Buka Google Drive">
+            Gelar_Karya_Mahasiswa_2026 <i class="fa-solid fa-arrow-up-right-from-square text-[10px]"></i>
+          </a>
+        </div>
+
+        <div class="flex items-center justify-between border-t border-zinc-800/80 pt-2">
+          <span class="text-zinc-400 flex items-center gap-1.5 font-medium">
+            <i class="fa-solid fa-bolt text-fuchsia-400 text-xs"></i> Auto-Upload ke Drive:
+          </span>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="checkAutoUpload" checked class="sr-only peer">
+            <div class="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
+        </div>
+      </div>
+
+      <!-- Webhook Configuration -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between">
+          <label for="inputScriptUrl" class="text-[11px] font-semibold text-zinc-300 flex items-center gap-1">
+            <i class="fa-solid fa-link text-zinc-500"></i> Google Apps Script Web App URL
+          </label>
+          <button id="btnOpenScriptGuide" class="text-[10px] text-fuchsia-400 hover:text-fuchsia-300 underline font-medium">
+            Panduan Pasang Skrip (1 Menit)
+          </button>
+        </div>
+        <div class="flex gap-2">
+          <input type="url" id="inputScriptUrl" placeholder="https://script.google.com/macros/s/.../exec" class="flex-1 bg-zinc-950 border border-zinc-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-zinc-200 placeholder-zinc-600 outline-none transition font-mono" />
+          <button id="btnSaveScriptUrl" class="px-3 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-zinc-700 transition flex items-center gap-1">
+            <i class="fa-solid fa-floppy-disk"></i> Simpan
+          </button>
+          <button id="btnTestScriptUrl" class="px-3 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 text-xs font-semibold border border-emerald-800/60 transition flex items-center gap-1">
+            <i class="fa-solid fa-satellite-dish"></i> Uji
+          </button>
+        </div>
+        <p id="scriptTestMessage" class="text-[10px] text-zinc-500">Foto akan otomatis tersimpan langsung ke folder Google Drive di atas.</p>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+        <a href="https://drive.google.com/drive/folders/1yXSfxRKoqjbr2Y5doG_57WtZxsxvQIss" target="_blank" rel="noopener noreferrer" class="py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-zinc-700 text-center">
+          <i class="fa-brands fa-google-drive text-emerald-400"></i> Buka Folder Drive
+        </a>
+        <button id="btnDownloadAllBackup" class="py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 border border-zinc-700 text-center">
+          <i class="fa-solid fa-download text-fuchsia-400"></i> Unduh Semua Sesi
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= MODAL: GALERI SESI INI ================= -->
+  <div id="modalGalleryView" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden animate-in fade-in duration-200">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl">
+      <!-- Gallery Header -->
+      <div class="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-fuchsia-600/20 text-fuchsia-400 flex items-center justify-center">
+            <i class="fa-solid fa-images text-sm"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm text-white flex items-center gap-2">
+              Galeri Sesi Ini
+              <span id="galleryModalCount" class="text-xs px-2 py-0.5 rounded-full font-semibold bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/20">0 Foto</span>
+            </h3>
+            <p class="text-[11px] text-zinc-400">Klik foto untuk melihat pratinjau, mengunduh file HD, atau unggah ulang ke Google Drive.</p>
+          </div>
+        </div>
+        <button id="btnCloseGalleryModal" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Gallery Grid -->
+      <div class="p-5 overflow-y-auto flex-1 bg-zinc-950">
+        <div id="sessionGridContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <p id="noPhotosPrompt" class="col-span-full text-center text-xs text-zinc-500 italic py-12">
+            Belum ada foto yang diambil pada sesi ini. Tekan tombol shutter di atas!
+          </p>
+        </div>
+      </div>
+
+      <!-- Gallery Footer -->
+      <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex items-center justify-between">
+        <button id="btnClearGallery" class="px-3 py-1.5 rounded-xl bg-rose-950/30 hover:bg-rose-900/50 text-rose-300 text-xs font-semibold border border-rose-900/30 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-trash-can"></i> Bersihkan Galeri
+        </button>
+        <button id="btnDownloadAllFromGallery" class="px-4 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition flex items-center gap-1.5">
+          <i class="fa-solid fa-download"></i> Unduh Semua Foto HD
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= PHOTO PREVIEW & LIVE UPLOAD MODAL ================= -->
+  <div id="modalPhotoView" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full max-h-[94vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-150">
+      
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-camera-retro text-fuchsia-400"></i>
+          <h3 class="font-bold text-sm text-white">Hasil Foto 4:3 Landscape</h3>
+        </div>
+        <button id="btnClosePhotoModal" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-4 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-zinc-950 gap-3">
+        <!-- 4:3 Result Box -->
+        <div class="relative w-full max-w-lg aspect-4-3 bg-zinc-900 rounded-xl overflow-hidden shadow-2xl border border-zinc-800 flex items-center justify-center">
+          <img id="modalResultImg" src="" alt="Photocard Preview" class="w-full h-full object-contain" />
+        </div>
+
+        <!-- Live Google Drive Upload Status Banner -->
+        <div id="modalUploadBanner" class="w-full max-w-lg p-3 rounded-xl border flex items-center justify-between text-xs bg-zinc-900 border-zinc-800">
+          <div class="flex items-center gap-2.5">
+            <span id="bannerIconWrapper" class="w-7 h-7 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400">
+              <i id="bannerStatusIcon" class="fa-solid fa-cloud"></i>
+            </span>
+            <div>
+              <p id="bannerTitle" class="font-bold text-zinc-200">Menunggu Unggah</p>
+              <p id="bannerSubtitle" class="text-[11px] text-zinc-400">Folder: Gelar_Karya_Mahasiswa_2026</p>
+            </div>
+          </div>
+          <div id="bannerActionArea" class="flex items-center gap-2"></div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex flex-wrap items-center justify-between gap-3">
+        <button id="btnDeleteCurrentPhoto" class="px-3.5 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-900/40 text-xs font-semibold flex items-center gap-1.5 transition">
+          <i class="fa-solid fa-trash-can"></i> Hapus
+        </button>
+
+        <div class="flex items-center gap-2">
+          <!-- Download Local Backup -->
+          <a id="btnDownloadCurrentPhoto" href="#" download="Photocard_4x3.png" class="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-download"></i> Unduh File HD
+          </a>
+          
+          <!-- Trigger Manual / Retry Upload Button -->
+          <button id="btnManualUploadDrive" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/30 flex items-center gap-2 transition">
+            <i class="fa-brands fa-google-drive"></i>
+            <span id="btnManualUploadText">Unggah ke Drive</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= GOOGLE APPS SCRIPT SETUP INSTRUCTIONS MODAL ================= -->
+  <div id="modalScriptGuide" class="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-5 hidden">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-4 border-b border-zinc-800 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-emerald-600/20 text-emerald-400 flex items-center justify-center">
+            <i class="fa-brands fa-google-drive text-base"></i>
+          </div>
+          <div>
+            <h3 class="font-bold text-sm text-white">Panduan Sinkronisasi Otomatis Google Drive</h3>
+            <p class="text-[11px] text-zinc-400">Hubungkan folder Gelar_Karya_Mahasiswa_2026 tanpa login berulang</p>
+          </div>
+        </div>
+        <button id="btnCloseScriptGuide" class="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white flex items-center justify-center transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto space-y-4 text-xs text-zinc-300">
+        <div class="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 flex items-start gap-3">
+          <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-amber-300 text-xs">Penyebab Error "Akses ditolak: DriveApp"</h4>
+            <p class="text-[11px] text-amber-200/90 mt-1 leading-relaxed">
+              Google mewajibkan Anda mengklik <strong>"Run / Jalankan"</strong> satu kali di editor Apps Script agar pop-up izin akun <em>(Review Permissions)</em> muncul dan disetujui. Tanpa langkah ini, Google Drive akan menolak akses skrip.
+            </p>
+          </div>
+        </div>
+
+        <p class="leading-relaxed">
+          Salin dan pasang kode Google Apps Script terbaru berikut ke akun 
+          <strong class="text-white">haqiqisalman23@gmail.com</strong>:
+        </p>
+
+        <!-- Apps Script Code Snippet -->
+        <div class="relative">
+          <pre id="gasCodeBlock" class="bg-black/90 p-3.5 rounded-xl border border-zinc-800 text-[11px] font-mono text-emerald-300 overflow-x-auto select-all leading-relaxed">// 1. JALANKAN FUNGSI INI 1x DI EDITOR AGAR MUNCUL POP-UP IZIN GOOGLE DRIVE:
+function beriIzinAksesDrive() {
+  DriveApp.getRootFolder();
+  Logger.log("Izin DriveApp berhasil diberikan!");
+}
+
+// 2. FUNGSI UNTUK MENERIMA DAN MENYIMPAN FOTO DARI WEBSITE
+function doPost(e) {
+  try {
+    var data = JSON.parse(e.postData.contents);
+    var targetFolderId = "1yXSfxRKoqjbr2Y5doG_57WtZxsxvQIss";
+    var folder;
+
+    try {
+      folder = DriveApp.getFolderById(targetFolderId);
+    } catch (errId) {
+      var folderIter = DriveApp.getFoldersByName("Gelar_Karya_Mahasiswa_2026");
+      if (folderIter.hasNext()) {
+        folder = folderIter.next();
+      } else {
+        folder = DriveApp.createFolder("Gelar_Karya_Mahasiswa_2026");
+      }
+    }
+
+    var decoded = Utilities.base64Decode(data.base64Data);
+    var blob = Utilities.newBlob(decoded, data.mimeType || "image/png", data.fileName || ("Photocard_" + Date.now() + ".png"));
+    var file = folder.createFile(blob);
+
+    try {
+      file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    } catch (eShare) {}
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      fileId: file.getId(),
+      fileUrl: file.getUrl(),
+      fileName: file.getName(),
+      folderName: folder.getName()
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// 3. FUNGSI UNTUK TES KONEKSI
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "ready",
+    message: "Google Apps Script Photocard Studio siap digunakan!"
+  })).setMimeType(ContentService.MimeType.JSON);
+}</pre>
+          <button id="btnCopyGasCode" class="absolute top-2.5 right-2.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-[11px] font-semibold flex items-center gap-1.5 transition shadow">
+            <i class="fa-regular fa-copy"></i> Salin Kode Skrip
+          </button>
+        </div>
+
+        <ol class="list-decimal list-inside space-y-2.5 bg-zinc-950 p-4 rounded-xl border border-zinc-800/80">
+          <li>Buka <a href="https://script.google.com" target="_blank" class="text-fuchsia-400 underline font-semibold">script.google.com</a> dengan akun <strong>haqiqisalman23@gmail.com</strong>.</li>
+          <li>Ganti semua kode di editor dengan kode di atas, lalu tekan <kbd class="px-1.5 py-0.5 bg-zinc-800 rounded text-[10px]">Ctrl + S</kbd>.</li>
+          <li class="text-emerald-300 font-semibold bg-emerald-950/40 p-2 rounded-lg border border-emerald-600/30">
+            KUNCI PENGATURAN: Pada dropdown fungsi di toolbar atas editor, pilih <code class="text-white bg-black px-1.5 py-0.5 rounded">beriIzinAksesDrive</code>, lalu klik tombol <strong class="text-white">Run (Jalankan)</strong>.
+          </li>
+          <li>Akan muncul dialog izin: klik <strong>Review Permissions</strong> &rarr; pilih akun Anda &rarr; klik <strong>Advanced (Lanjutan)</strong> &rarr; klik <strong>Go to... (tidak aman)</strong> &rarr; klik <strong>Allow (Izinkan)</strong>.</li>
+          <li>Setelah log <em>"Execution completed"</em> muncul, klik tombol <strong>Deploy (Terapkan)</strong> &rarr; <strong>New deployment</strong>.</li>
+          <li>Pilih jenis <strong>Web app</strong>:
+            <ul class="list-disc list-inside ml-4 mt-1 text-zinc-400">
+              <li>Execute as: <span class="text-white font-medium">Me (haqiqisalman23@gmail.com)</span></li>
+              <li>Who has access: <span class="text-white font-medium">Anyone (Siapa saja)</span></li>
+            </ul>
+          </li>
+          <li>Salin <strong>Web App URL</strong> yang dihasilkan, tempel ke kolom di aplikasi ini, lalu klik tombol <strong>Simpan</strong> & <strong>Uji</strong>.</li>
+        </ol>
+      </div>
+
+      <div class="p-4 bg-zinc-900 border-t border-zinc-800 flex justify-end">
+        <button id="btnDoneScriptGuide" class="px-5 py-2 rounded-xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white text-xs font-bold transition">
+          Mengerti & Selesai
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= CUSTOM TOAST CONTAINER ================= -->
+  <div id="toastContainer" class="fixed bottom-20 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- Hidden Offscreen Canvas for High-Resolution 4:3 Rendering (1600 x 1200) -->
+  <canvas id="renderCanvas" width="1600" height="1200" class="hidden"></canvas>
+
+  <!-- ================= JAVASCRIPT APPLICATION LOGIC ================= -->
+  <script>
+    /* --- Constant Configuration --- */
+    const TARGET_CONFIG = {
+      account: 'haqiqisalman23@gmail.com',
+      folderId: '1yXSfxRKoqjbr2Y5doG_57WtZxsxvQIss',
+      folderName: 'Gelar_Karya_Mahasiswa_2026',
+      folderUrl: 'https://drive.google.com/drive/folders/1yXSfxRKoqjbr2Y5doG_57WtZxsxvQIss',
+      storageKeyWebhook: 'photocard_drive_webhook_url'
+    };
+
+    /* --- Application State --- */
+    const state = {
+      stream: null,
+      facingMode: 'user',
+      isMirrored: true,
+      isExpanded: false,
+      rotationMode: 'auto',      // 'auto' | 'manual'
+      manualRotation: 0,         // 0, 90, 180, 270
+      sensorDetectedAngle: 0,    // 0, 90, 180, 270
+      effectiveRotation: 0,
+      timerSeconds: 0,
+      soundEnabled: true,
+      autoUpload: true,
+      scriptUrl: localStorage.getItem(TARGET_CONFIG.storageKeyWebhook) || '',
+      photos: [], // { id, dataUrl, fileName, timestamp, uploadStatus, driveUrl }
+      activePhotoId: null,
+      watermark: {
+        enabled: true,
+        imgElement: null,
+        fileName: ''
+      }
+    };
+
+    /* --- DOM Elements --- */
+    const cameraCardContainer = document.getElementById('cameraCardContainer');
+    const btnToggleExpandCamera = document.getElementById('btnToggleExpandCamera');
+    const expandIcon = document.getElementById('expandIcon');
+    const expandStatusText = document.getElementById('expandStatusText');
+    const video = document.getElementById('videoPreview');
+    const cameraPrompt = document.getElementById('cameraPrompt');
+    const btnStartCamera = document.getElementById('btnStartCamera');
+    const btnCapturePhoto = document.getElementById('btnCapturePhoto');
+    const btnSwitchCamera = document.getElementById('btnSwitchCamera');
+    const btnToggleMirror = document.getElementById('btnToggleMirror');
+    const mirrorStatusText = document.getElementById('mirrorStatusText');
+    const btnToggleRotate = document.getElementById('btnToggleRotate');
+    const rotateStatusText = document.getElementById('rotateStatusText');
+    const badgeRotationText = document.getElementById('badgeRotationText');
+    const cameraFlash = document.getElementById('cameraFlash');
+    const countdownBox = document.getElementById('countdownBox');
+    const countdownNumber = document.getElementById('countdownNumber');
+    const driveStatusIndicator = document.getElementById('driveStatusIndicator');
+    const btnToggleSound = document.getElementById('btnToggleSound');
+    const soundIcon = document.getElementById('soundIcon');
+    const soundText = document.getElementById('soundText');
+
+    // Navigasi Atas - Gallery Button & Modal
+    const btnOpenGalleryModal = document.getElementById('btnOpenGalleryModal');
+    const sessionCountBadge = document.getElementById('sessionCountBadge');
+    const modalGalleryView = document.getElementById('modalGalleryView');
+    const btnCloseGalleryModal = document.getElementById('btnCloseGalleryModal');
+    const sessionGridContainer = document.getElementById('sessionGridContainer');
+    const galleryModalCount = document.getElementById('galleryModalCount');
+    const noPhotosPrompt = document.getElementById('noPhotosPrompt');
+    const btnClearGallery = document.getElementById('btnClearGallery');
+    const btnDownloadAllFromGallery = document.getElementById('btnDownloadAllFromGallery');
+
+    // Navigasi Bawah (Ribbon Bottom) Elements
+    const btnRibbonWatermark = document.getElementById('btnRibbonWatermark');
+    const ribbonWatermarkBadge = document.getElementById('ribbonWatermarkBadge');
+    const ribbonWatermarkName = document.getElementById('ribbonWatermarkName');
+    const drawerWatermark = document.getElementById('drawerWatermark');
+    const btnCloseWatermarkDrawer = document.getElementById('btnCloseWatermarkDrawer');
+    const btnDoneWatermarkDrawer = document.getElementById('btnDoneWatermarkDrawer');
+
+    const btnRibbonDrive = document.getElementById('btnRibbonDrive');
+    const ribbonDriveBadge = document.getElementById('ribbonDriveBadge');
+    const drawerDrive = document.getElementById('drawerDrive');
+    const btnCloseDriveDrawer = document.getElementById('btnCloseDriveDrawer');
+
+    // Watermark Elements
+    const watermarkLiveOverlay = document.getElementById('watermarkLiveOverlay');
+    const watermarkPreviewImg = document.getElementById('watermarkPreviewImg');
+    const watermarkFileInput = document.getElementById('watermarkFileInput');
+    const dropZoneWatermark = document.getElementById('dropZoneWatermark');
+    const checkWatermarkEnabled = document.getElementById('checkWatermarkEnabled');
+    const activeWatermarkInfo = document.getElementById('activeWatermarkInfo');
+    const thumbWatermarkPreview = document.getElementById('thumbWatermarkPreview');
+    const watermarkFileName = document.getElementById('watermarkFileName');
+    const btnRemoveWatermark = document.getElementById('btnRemoveWatermark');
+
+    // Webhook Elements
+    const inputScriptUrl = document.getElementById('inputScriptUrl');
+    const btnSaveScriptUrl = document.getElementById('btnSaveScriptUrl');
+    const btnTestScriptUrl = document.getElementById('btnTestScriptUrl');
+    const scriptTestMessage = document.getElementById('scriptTestMessage');
+    const checkAutoUpload = document.getElementById('checkAutoUpload');
+    const btnOpenScriptGuide = document.getElementById('btnOpenScriptGuide');
+    const modalScriptGuide = document.getElementById('modalScriptGuide');
+    const btnCloseScriptGuide = document.getElementById('btnCloseScriptGuide');
+    const btnDoneScriptGuide = document.getElementById('btnDoneScriptGuide');
+    const btnCopyGasCode = document.getElementById('btnCopyGasCode');
+    const gasCodeBlock = document.getElementById('gasCodeBlock');
+    const btnDownloadAllBackup = document.getElementById('btnDownloadAllBackup');
+
+    // Photo Preview Modal Elements
+    const modalPhotoView = document.getElementById('modalPhotoView');
+    const modalResultImg = document.getElementById('modalResultImg');
+    const btnClosePhotoModal = document.getElementById('btnClosePhotoModal');
+    const btnDeleteCurrentPhoto = document.getElementById('btnDeleteCurrentPhoto');
+    const btnDownloadCurrentPhoto = document.getElementById('btnDownloadCurrentPhoto');
+    const btnManualUploadDrive = document.getElementById('btnManualUploadDrive');
+    const btnManualUploadText = document.getElementById('btnManualUploadText');
+    const modalUploadBanner = document.getElementById('modalUploadBanner');
+    const bannerStatusIcon = document.getElementById('bannerStatusIcon');
+    const bannerIconWrapper = document.getElementById('bannerIconWrapper');
+    const bannerTitle = document.getElementById('bannerTitle');
+    const bannerSubtitle = document.getElementById('bannerSubtitle');
+    const bannerActionArea = document.getElementById('bannerActionArea');
+
+    const renderCanvas = document.getElementById('renderCanvas');
+
+    /* ==========================================================
+       1. SYNTHETIC AUDIO (Pure Web Audio API)
+       ========================================================== */
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      return audioCtx;
+    }
+
+    function playBeep(isFinal = false) {
+      if (!state.soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(isFinal ? 880 : 440, ctx.currentTime);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.13);
+      } catch (err) {
+        console.warn('Audio error:', err);
+      }
+    }
+
+    function playShutterSound() {
+      if (!state.soundEnabled) return;
+      try {
+        const ctx = getAudioContext();
+        if (ctx.state === 'suspended') ctx.resume();
+
+        // Shutter mechanical thud
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(160, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.09);
+        gain.gain.setValueAtTime(0.8, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.09);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.1);
+
+        // Click noise
+        const bufferSize = ctx.sampleRate * 0.05;
+        const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = Math.random() * 2 - 1;
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'highpass';
+        filter.frequency.value = 1000;
+        const noiseGain = ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.4, ctx.currentTime);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.05);
+        noise.connect(filter);
+        filter.connect(noiseGain);
+        noiseGain.connect(ctx.destination);
+        noise.start();
+      } catch (err) {
+        console.warn('Audio shutter error:', err);
+      }
+    }
+
+    /* ==========================================================
+       2. CAMERA STREAM INITIALIZATION & ROTATION
+       ========================================================== */
+    async function startCamera() {
+      try {
+        if (state.stream) {
+          state.stream.getTracks().forEach(track => track.stop());
+        }
+        const constraints = {
+          video: {
+            facingMode: state.facingMode,
+            width: { ideal: 1920 },
+            height: { ideal: 1440 },
+            aspectRatio: { ideal: 4 / 3 }
+          },
+          audio: false
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        state.stream = stream;
+        video.srcObject = stream;
+        cameraPrompt.classList.add('hidden');
+        applyCameraTransform();
+      } catch (err) {
+        console.error('Kamera error:', err);
+        showToast('Gagal mengakses kamera. Mohon izinkan izin kamera di browser.', 'error');
+      }
+    }
+
+    function calculateEffectiveRotation() {
+      if (state.rotationMode === 'manual') {
+        return state.manualRotation;
+      }
+      const isWindowLandscape = window.innerWidth > window.innerHeight;
+      const vidW = video.videoWidth || 0;
+      const vidH = video.videoHeight || 0;
+      const isStreamLandscape = vidW >= vidH;
+
+      if (isWindowLandscape && isStreamLandscape) {
+        return 0;
+      }
+      if (state.sensorDetectedAngle !== 0) {
+        return state.sensorDetectedAngle;
+      }
+      if (window.screen && window.screen.orientation && typeof window.screen.orientation.angle === 'number') {
+        return window.screen.orientation.angle;
+      }
+      return 0;
+    }
+
+    function applyCameraTransform() {
+      state.effectiveRotation = calculateEffectiveRotation();
+      const isRotated90or270 = state.effectiveRotation === 90 || state.effectiveRotation === 270;
+      const scaleX = state.isMirrored ? -1 : 1;
+      const scaleFactor = isRotated90or270 ? 1.334 : 1;
+
+      video.style.transform = `scaleX(${scaleX}) rotate(${state.effectiveRotation}deg) scale(${scaleFactor})`;
+
+      if (mirrorStatusText) mirrorStatusText.textContent = state.isMirrored ? 'Mirror: ON' : 'Mirror: OFF';
+      if (rotateStatusText) rotateStatusText.textContent = state.rotationMode === 'auto' ? 'Auto' : 'Manual';
+      if (badgeRotationText) badgeRotationText.textContent = `${state.effectiveRotation}°`;
+    }
+
+    btnToggleRotate.addEventListener('click', () => {
+      requestSensorPermissionIfNeeded();
+      if (state.rotationMode === 'auto') {
+        state.rotationMode = 'manual';
+        state.manualRotation = 90;
+      } else if (state.manualRotation === 90) {
+        state.manualRotation = 180;
+      } else if (state.manualRotation === 180) {
+        state.manualRotation = 270;
+      } else if (state.manualRotation === 270) {
+        state.manualRotation = 0;
+      } else {
+        state.rotationMode = 'auto';
+        state.manualRotation = 0;
+      }
+      applyCameraTransform();
+      showToast(`Rotasi: ${state.rotationMode === 'auto' ? 'Auto (' + state.effectiveRotation + '°)' : state.manualRotation + '°'}`);
+    });
+
+    function handleDeviceOrientation(e) {
+      if (state.rotationMode !== 'auto') return;
+      if (e.beta === null || e.gamma === null) return;
+      const g = e.gamma;
+      const b = e.beta;
+      let detected = state.sensorDetectedAngle;
+
+      if (g > 35 && Math.abs(b) < 65) detected = 90;
+      else if (g < -35 && Math.abs(b) < 65) detected = 270;
+      else if (b > 35 && Math.abs(g) < 35) detected = 0;
+      else if (b < -35 && Math.abs(g) < 35) detected = 180;
+
+      if (detected !== state.sensorDetectedAngle) {
+        state.sensorDetectedAngle = detected;
+        applyCameraTransform();
+      }
+    }
+
+    function requestSensorPermissionIfNeeded() {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(res => {
+            if (res === 'granted') window.addEventListener('deviceorientation', handleDeviceOrientation);
+          })
+          .catch(console.warn);
+      } else if ('ondeviceorientation' in window) {
+        window.addEventListener('deviceorientation', handleDeviceOrientation);
+      }
+    }
+
+    btnStartCamera.addEventListener('click', () => {
+      requestSensorPermissionIfNeeded();
+      startCamera();
+    });
+
+    btnSwitchCamera.addEventListener('click', () => {
+      state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+      state.isMirrored = state.facingMode === 'user';
+      applyCameraTransform();
+      startCamera();
+    });
+
+    btnToggleMirror.addEventListener('click', () => {
+      state.isMirrored = !state.isMirrored;
+      applyCameraTransform();
+      showToast(`Mode Cermin: ${state.isMirrored ? 'Aktif' : 'Nonaktif'}`);
+    });
+
+    // Expand Fullscreen Toggle
+    function toggleCameraExpand(forceState = null) {
+      state.isExpanded = typeof forceState === 'boolean' ? forceState : !state.isExpanded;
+      if (state.isExpanded) {
+        cameraCardContainer.classList.add('camera-expanded');
+        document.body.classList.add('overflow-hidden');
+        expandIcon.className = 'fa-solid fa-compress text-xs text-amber-400';
+        expandStatusText.textContent = 'Kecilkan';
+        try {
+          if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          }
+        } catch (e) {}
+        showToast('Mode Layar Penuh aktif! Tekan ESC untuk kembali.', 'info');
+      } else {
+        cameraCardContainer.classList.remove('camera-expanded');
+        document.body.classList.remove('overflow-hidden');
+        expandIcon.className = 'fa-solid fa-expand text-xs text-fuchsia-400';
+        expandStatusText.textContent = 'Perbesar';
+        try {
+          if (document.fullscreenElement && document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          }
+        } catch (e) {}
+      }
+    }
+
+    btnToggleExpandCamera.addEventListener('click', () => toggleCameraExpand());
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.isExpanded) toggleCameraExpand(false);
+    });
+
+    // Timer selector buttons
+    document.querySelectorAll('.timer-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.timer-btn').forEach(b => {
+          b.className = 'timer-btn px-2 py-0.5 rounded-lg font-semibold text-zinc-400 hover:text-white text-[11px]';
+        });
+        btn.className = 'timer-btn px-2 py-0.5 rounded-lg font-semibold bg-zinc-800 text-white text-[11px]';
+        state.timerSeconds = parseInt(btn.dataset.seconds, 10);
+      });
+    });
+
+    btnToggleSound.addEventListener('click', () => {
+      state.soundEnabled = !state.soundEnabled;
+      soundIcon.className = state.soundEnabled ? 'fa-solid fa-volume-high text-fuchsia-400' : 'fa-solid fa-volume-xmark text-zinc-500';
+      soundText.textContent = state.soundEnabled ? 'Suara: ON' : 'Suara: OFF';
+      showToast(`Suara Shutter: ${state.soundEnabled ? 'Aktif' : 'Mati'}`);
+    });
+
+    /* ==========================================================
+       3. WATERMARK PNG & BOTTOM RIBBON DRAWER
+       ========================================================== */
+    function renderWatermarkOverlay() {
+      if (state.watermark.enabled && state.watermark.imgElement) {
+        watermarkPreviewImg.src = state.watermark.imgElement.src;
+        watermarkLiveOverlay.classList.remove('hidden');
+        activeWatermarkInfo.classList.remove('hidden');
+        watermarkFileName.textContent = state.watermark.fileName;
+        thumbWatermarkPreview.src = state.watermark.imgElement.src;
+        
+        // Update Ribbon Bottom Text
+        ribbonWatermarkBadge.textContent = 'ON';
+        ribbonWatermarkBadge.className = 'text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/40';
+        ribbonWatermarkName.textContent = state.watermark.fileName;
+      } else {
+        watermarkLiveOverlay.classList.add('hidden');
+        if (!state.watermark.imgElement) {
+          activeWatermarkInfo.classList.add('hidden');
+          ribbonWatermarkBadge.textContent = 'Kosong';
+          ribbonWatermarkBadge.className = 'text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-zinc-700 text-zinc-300';
+          ribbonWatermarkName.textContent = 'Tarik & lepas file PNG';
+        } else {
+          ribbonWatermarkBadge.textContent = 'Mati';
+          ribbonWatermarkBadge.className = 'text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-zinc-700 text-zinc-400';
+        }
+      }
+    }
+
+    function handleWatermarkFile(file) {
+      if (!file) return;
+      if (!file.type.includes('png') && !file.type.includes('webp')) {
+        showToast('Format tidak sesuai. Gunakan berkas PNG transparan.', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          state.watermark.imgElement = img;
+          state.watermark.fileName = file.name;
+          state.watermark.enabled = true;
+          checkWatermarkEnabled.checked = true;
+          renderWatermarkOverlay();
+          showToast('Watermark PNG berhasil dipasang di live feed!', 'success');
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    dropZoneWatermark.addEventListener('click', () => watermarkFileInput.click());
+    dropZoneWatermark.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZoneWatermark.classList.add('border-fuchsia-500', 'bg-fuchsia-500/10');
+    });
+    dropZoneWatermark.addEventListener('dragleave', () => {
+      dropZoneWatermark.classList.remove('border-fuchsia-500', 'bg-fuchsia-500/10');
+    });
+    dropZoneWatermark.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZoneWatermark.classList.remove('border-fuchsia-500', 'bg-fuchsia-500/10');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleWatermarkFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    watermarkFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleWatermarkFile(e.target.files[0]);
+      }
+    });
+
+    btnRemoveWatermark.addEventListener('click', () => {
+      state.watermark.imgElement = null;
+      state.watermark.fileName = '';
+      watermarkFileInput.value = '';
+      renderWatermarkOverlay();
+      showToast('Watermark dihapus.');
+    });
+
+    checkWatermarkEnabled.addEventListener('change', (e) => {
+      state.watermark.enabled = e.target.checked;
+      renderWatermarkOverlay();
+      showToast(`Watermark: ${state.watermark.enabled ? 'Aktif' : 'Nonaktif'}`);
+    });
+
+    // Bottom Ribbon Drawer Toggles
+    btnRibbonWatermark.addEventListener('click', () => drawerWatermark.classList.remove('hidden'));
+    btnCloseWatermarkDrawer.addEventListener('click', () => drawerWatermark.classList.add('hidden'));
+    btnDoneWatermarkDrawer.addEventListener('click', () => drawerWatermark.classList.add('hidden'));
+
+    btnRibbonDrive.addEventListener('click', () => drawerDrive.classList.remove('hidden'));
+    btnCloseDriveDrawer.addEventListener('click', () => drawerDrive.classList.add('hidden'));
+
+    /* ==========================================================
+       4. CAPTURE LOGIC & HD 4:3 RENDERING
+       ========================================================== */
+    btnCapturePhoto.addEventListener('click', () => {
+      if (!state.stream) {
+        showToast('Kamera belum aktif. Klik Izinkan & Mulai Kamera!', 'error');
+        return;
+      }
+      if (state.timerSeconds > 0) {
+        startCountdownAndSnap(state.timerSeconds);
+      } else {
+        executeSnap();
+      }
+    });
+
+    function startCountdownAndSnap(seconds) {
+      btnCapturePhoto.disabled = true;
+      countdownBox.classList.remove('hidden');
+      let count = seconds;
+      countdownNumber.textContent = count;
+      playBeep(false);
+
+      const interval = setInterval(() => {
+        count--;
+        if (count > 0) {
+          countdownNumber.textContent = count;
+          playBeep(false);
+        } else {
+          clearInterval(interval);
+          countdownBox.classList.add('hidden');
+          playBeep(true);
+          btnCapturePhoto.disabled = false;
+          executeSnap();
+        }
+      }, 1000);
+    }
+
+    function executeSnap() {
+      cameraFlash.classList.remove('flash-triggered');
+      void cameraFlash.offsetWidth;
+      cameraFlash.classList.add('flash-triggered');
+
+      playShutterSound();
+
+      const canvas = renderCanvas;
+      const ctx = canvas.getContext('2d');
+      const w = 1600;
+      const h = 1200;
+
+      canvas.width = w;
+      canvas.height = h;
+
+      ctx.save();
+      ctx.translate(w / 2, h / 2);
+
+      if (state.isMirrored) ctx.scale(-1, 1);
+
+      const angleRad = (state.effectiveRotation * Math.PI) / 180;
+      ctx.rotate(angleRad);
+
+      const vidW = video.videoWidth || 640;
+      const vidH = video.videoHeight || 480;
+      const isSwapped = (state.effectiveRotation === 90 || state.effectiveRotation === 270);
+      const targetW = isSwapped ? h : w;
+      const targetH = isSwapped ? w : h;
+      const targetRatio = targetW / targetH;
+      const vidRatio = vidW / vidH;
+
+      let sx, sy, sWidth, sHeight;
+      if (vidRatio > targetRatio) {
+        sHeight = vidH;
+        sWidth = vidH * targetRatio;
+        sx = (vidW - sWidth) / 2;
+        sy = 0;
+      } else {
+        sWidth = vidW;
+        sHeight = vidW / targetRatio;
+        sx = 0;
+        sy = (vidH - sHeight) / 2;
+      }
+
+      ctx.drawImage(video, sx, sy, sWidth, sHeight, -targetW / 2, -targetH / 2, targetW, targetH);
+      ctx.restore();
+
+      // Draw Watermark Overlay
+      if (state.watermark.enabled && state.watermark.imgElement) {
+        const wmImg = state.watermark.imgElement;
+        const targetCanvasRatio = w / h;
+        const wmRatio = wmImg.naturalWidth / wmImg.naturalHeight;
+
+        if (Math.abs(wmRatio - targetCanvasRatio) < 0.05) {
+          ctx.drawImage(wmImg, 0, 0, w, h);
+        } else {
+          let dw, dh, dx, dy;
+          if (wmRatio > targetCanvasRatio) {
+            dw = w;
+            dh = w / wmRatio;
+            dx = 0;
+            dy = (h - dh) / 2;
+          } else {
+            dh = h;
+            dw = h * wmRatio;
+            dx = (w - dw) / 2;
+            dy = 0;
+          }
+          ctx.drawImage(wmImg, dx, dy, dw, dh);
+        }
+      }
+
+      const dataUrl = canvas.toDataURL('image/png', 0.95);
+      const photoId = 'PK_' + Date.now();
+      const fileName = `Gelar_Karya_Mahasiswa_2026_${photoId}.png`;
+
+      const newPhoto = {
+        id: photoId,
+        dataUrl: dataUrl,
+        fileName: fileName,
+        timestamp: new Date().toLocaleTimeString('id-ID'),
+        uploadStatus: 'idle',
+        driveUrl: null,
+        errorMessage: null
+      };
+
+      state.photos.unshift(newPhoto);
+      state.activePhotoId = photoId;
+
+      updateGalleryUI();
+      openPhotoModal(newPhoto);
+
+      if (state.autoUpload) {
+        uploadPhotoToDrive(newPhoto);
+      }
+    }
+
+    /* ==========================================================
+       5. GOOGLE DRIVE AUTOMATIC UPLOAD ENGINE
+       ========================================================== */
+    async function uploadPhotoToDrive(photo) {
+      if (!photo) return;
+      if (!state.scriptUrl) {
+        photo.uploadStatus = 'failed';
+        photo.errorMessage = 'URL Google Apps Script belum disetel.';
+        updateGalleryUI();
+        updateModalUploadBanner(photo);
+        showToast('Unggahan tertunda: URL Google Apps Script belum disetel.', 'error');
+        return;
+      }
+
+      photo.uploadStatus = 'uploading';
+      photo.errorMessage = null;
+      driveStatusIndicator.classList.remove('hidden');
+      updateGalleryUI();
+      updateModalUploadBanner(photo);
+
+      try {
+        const base64Data = photo.dataUrl.split(',')[1];
+        const payload = {
+          folderId: TARGET_CONFIG.folderId,
+          fileName: photo.fileName,
+          mimeType: 'image/png',
+          base64Data: base64Data
+        };
+
+        const response = await fetch(state.scriptUrl, {
+          method: 'POST',
+          redirect: 'follow',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+        if (result && result.status === 'success') {
+          photo.uploadStatus = 'success';
+          photo.driveUrl = result.fileUrl || TARGET_CONFIG.folderUrl;
+          showToast(`Foto '${photo.fileName}' sukses terunggah ke Google Drive!`, 'success');
+        } else {
+          throw new Error(result.message || 'Respon dari Apps Script gagal.');
+        }
+      } catch (err) {
+        console.error('Upload Error:', err);
+        photo.uploadStatus = 'failed';
+        if (err.message && (err.message.includes('Akses ditolak') || err.message.includes('Access denied'))) {
+          photo.errorMessage = 'Akses ditolak: Skrip Apps Script belum diberi izin DriveApp.';
+          showToast('Akses ditolak DriveApp: Skrip perlu otorisasi "Run" di Apps Script.', 'error');
+        } else {
+          photo.errorMessage = err.message || 'Koneksi ke Apps Script gagal.';
+          showToast('Gagal mengunggah ke Drive: ' + photo.errorMessage, 'error');
+        }
+      } finally {
+        driveStatusIndicator.classList.add('hidden');
+        updateGalleryUI();
+        updateModalUploadBanner(photo);
+      }
+    }
+
+    btnSaveScriptUrl.addEventListener('click', () => {
+      const url = inputScriptUrl.value.trim();
+      if (!url) {
+        state.scriptUrl = '';
+        localStorage.removeItem(TARGET_CONFIG.storageKeyWebhook);
+        updateWebhookStatusUI();
+        showToast('URL Google Apps Script dikosongkan.');
+        return;
+      }
+      if (!url.startsWith('https://script.google.com/macros/s/')) {
+        showToast('URL harus diawali dengan https://script.google.com/macros/s/...', 'error');
+        return;
+      }
+      state.scriptUrl = url;
+      localStorage.setItem(TARGET_CONFIG.storageKeyWebhook, url);
+      updateWebhookStatusUI();
+      showToast('URL Google Apps Script tersimpan!', 'success');
+    });
+
+    btnTestScriptUrl.addEventListener('click', async () => {
+      const url = inputScriptUrl.value.trim() || state.scriptUrl;
+      if (!url) {
+        showToast('Masukkan URL Web App terlebih dahulu!', 'error');
+        return;
+      }
+      btnTestScriptUrl.disabled = true;
+      btnTestScriptUrl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Uji...';
+      scriptTestMessage.innerHTML = '<span class="text-amber-400"><i class="fa-solid fa-circle-notch fa-spin"></i> Menguji koneksi...</span>';
+
+      try {
+        const res = await fetch(url + '?ping=1', { method: 'GET', redirect: 'follow' });
+        const data = await res.json();
+        if (data && data.status === 'ready') {
+          scriptTestMessage.innerHTML = '<span class="text-emerald-400 font-semibold"><i class="fa-solid fa-circle-check"></i> Skrip terhubung & siap!</span>';
+          showToast('Koneksi Google Apps Script berhasil!', 'success');
+        } else {
+          scriptTestMessage.innerHTML = '<span class="text-emerald-400"><i class="fa-solid fa-check"></i> Respon diterima dari skrip.</span>';
+          showToast('Koneksi berhasil!', 'success');
+        }
+      } catch (err) {
+        scriptTestMessage.innerHTML = '<span class="text-amber-300 font-semibold"><i class="fa-solid fa-circle-info"></i> Skrip aktif. Pastikan fungsi "beriIzinAksesDrive" sudah di-Run.</span>';
+        showToast('URL tersambung. Pastikan izin Drive sudah diizinkan di Apps Script.', 'info');
+      } finally {
+        btnTestScriptUrl.disabled = false;
+        btnTestScriptUrl.innerHTML = '<i class="fa-solid fa-satellite-dish"></i> Uji';
+      }
+    });
+
+    function updateWebhookStatusUI() {
+      if (state.scriptUrl) {
+        inputScriptUrl.value = state.scriptUrl;
+        ribbonDriveBadge.className = 'text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+        ribbonDriveBadge.textContent = 'Terhubung';
+      } else {
+        ribbonDriveBadge.className = 'text-[9px] px-1.5 py-0.2 rounded-full font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30';
+        ribbonDriveBadge.textContent = 'Belum Ada URL';
+      }
+    }
+
+    checkAutoUpload.addEventListener('change', (e) => {
+      state.autoUpload = e.target.checked;
+      showToast(`Auto-Upload: ${state.autoUpload ? 'Aktif' : 'Nonaktif'}`);
+    });
+
+    /* ==========================================================
+       6. GALERI SESI INI & MODAL PREVIEW
+       ========================================================== */
+    btnOpenGalleryModal.addEventListener('click', () => {
+      updateGalleryUI();
+      modalGalleryView.classList.remove('hidden');
+    });
+
+    btnCloseGalleryModal.addEventListener('click', () => {
+      modalGalleryView.classList.add('hidden');
+    });
+
+    function updateGalleryUI() {
+      sessionCountBadge.textContent = state.photos.length;
+      galleryModalCount.textContent = `${state.photos.length} Foto`;
+
+      if (state.photos.length === 0) {
+        sessionGridContainer.innerHTML = '';
+        sessionGridContainer.appendChild(noPhotosPrompt);
+        noPhotosPrompt.classList.remove('hidden');
+        return;
+      }
+
+      noPhotosPrompt.classList.add('hidden');
+      sessionGridContainer.innerHTML = '';
+
+      state.photos.forEach(photo => {
+        const item = document.createElement('div');
+        let statusBadge = '';
+        if (photo.uploadStatus === 'uploading') {
+          statusBadge = '<span class="absolute top-2 right-2 bg-amber-500 text-black text-[9px] px-1.5 py-0.5 rounded-full font-bold shadow flex items-center gap-1"><i class="fa-solid fa-circle-notch fa-spin text-[8px]"></i> Upload</span>';
+        } else if (photo.uploadStatus === 'success') {
+          statusBadge = '<span class="absolute top-2 right-2 bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold shadow flex items-center gap-1"><i class="fa-solid fa-check text-[8px]"></i> Drive</span>';
+        } else if (photo.uploadStatus === 'failed') {
+          statusBadge = '<span class="absolute top-2 right-2 bg-rose-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-bold shadow flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation text-[8px]"></i> Gagal</span>';
+        }
+
+        item.className = 'relative group aspect-4-3 bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800 hover:border-fuchsia-500 cursor-pointer transition shadow-md hover:scale-105';
+        item.innerHTML = `
+          <img src="${photo.dataUrl}" alt="${photo.fileName}" class="w-full h-full object-cover" />
+          ${statusBadge}
+          <div class="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent p-2 flex items-center justify-between opacity-0 group-hover:opacity-100 transition">
+            <span class="text-[10px] text-zinc-300 font-mono truncate">${photo.timestamp}</span>
+            <span class="text-[10px] text-fuchsia-400 font-bold">Buka &rarr;</span>
+          </div>
+        `;
+
+        item.addEventListener('click', () => {
+          state.activePhotoId = photo.id;
+          openPhotoModal(photo);
+        });
+
+        sessionGridContainer.appendChild(item);
+      });
+    }
+
+    btnClearGallery.addEventListener('click', () => {
+      if (state.photos.length === 0) return;
+      state.photos = [];
+      updateGalleryUI();
+      showToast('Galeri sesi ini telah dibersihkan.');
+    });
+
+    function openPhotoModal(photo) {
+      if (!photo) return;
+      modalResultImg.src = photo.dataUrl;
+      btnDownloadCurrentPhoto.href = photo.dataUrl;
+      btnDownloadCurrentPhoto.download = photo.fileName;
+
+      updateModalUploadBanner(photo);
+      modalPhotoView.classList.remove('hidden');
+    }
+
+    function updateModalUploadBanner(photo) {
+      if (!photo) return;
+      bannerActionArea.innerHTML = '';
+
+      if (photo.uploadStatus === 'uploading') {
+        modalUploadBanner.className = 'w-full max-w-lg p-3 rounded-xl border flex items-center justify-between text-xs bg-amber-950/20 border-amber-500/30';
+        bannerIconWrapper.className = 'w-7 h-7 rounded-lg flex items-center justify-center bg-amber-500/20 text-amber-400';
+        bannerStatusIcon.className = 'fa-solid fa-circle-notch fa-spin';
+        bannerTitle.textContent = 'Sedang Mengunggah ke Google Drive...';
+        bannerSubtitle.textContent = 'Folder: Gelar_Karya_Mahasiswa_2026';
+        btnManualUploadText.textContent = 'Mengunggah...';
+        btnManualUploadDrive.disabled = true;
+
+      } else if (photo.uploadStatus === 'success') {
+        modalUploadBanner.className = 'w-full max-w-lg p-3 rounded-xl border flex items-center justify-between text-xs bg-emerald-950/20 border-emerald-500/30';
+        bannerIconWrapper.className = 'w-7 h-7 rounded-lg flex items-center justify-center bg-emerald-500/20 text-emerald-400';
+        bannerStatusIcon.className = 'fa-solid fa-cloud-arrow-up';
+        bannerTitle.textContent = 'Berhasil Tersimpan di Google Drive!';
+        bannerSubtitle.textContent = 'Akun: haqiqisalman23@gmail.com';
+
+        if (photo.driveUrl) {
+          const btnViewFile = document.createElement('a');
+          btnViewFile.href = photo.driveUrl;
+          btnViewFile.target = '_blank';
+          btnViewFile.rel = 'noopener noreferrer';
+          btnViewFile.className = 'px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] flex items-center gap-1 transition shadow';
+          btnViewFile.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square"></i> Buka File';
+          bannerActionArea.appendChild(btnViewFile);
+        }
+
+        btnManualUploadText.textContent = 'Unggah Ulang';
+        btnManualUploadDrive.disabled = false;
+
+      } else if (photo.uploadStatus === 'failed') {
+        modalUploadBanner.className = 'w-full max-w-lg p-3 rounded-xl border flex items-center justify-between text-xs bg-rose-950/20 border-rose-500/30';
+        bannerIconWrapper.className = 'w-7 h-7 rounded-lg flex items-center justify-center bg-rose-500/20 text-rose-400';
+        bannerStatusIcon.className = 'fa-solid fa-triangle-exclamation';
+        bannerTitle.textContent = 'Gagal Mengunggah ke Drive';
+        bannerSubtitle.textContent = photo.errorMessage || 'Periksa izin skrip Google Apps Script.';
+
+        if (photo.errorMessage && (photo.errorMessage.includes('Akses ditolak') || photo.errorMessage.includes('Access denied'))) {
+          const btnFixGuide = document.createElement('button');
+          btnFixGuide.className = 'px-2.5 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-semibold text-[11px] flex items-center gap-1 transition shadow';
+          btnFixGuide.innerHTML = '<i class="fa-solid fa-wrench"></i> Panduan Izin';
+          btnFixGuide.addEventListener('click', openScriptGuide);
+          bannerActionArea.appendChild(btnFixGuide);
+        }
+
+        btnManualUploadText.textContent = 'Coba Lagi';
+        btnManualUploadDrive.disabled = false;
+      } else {
+        modalUploadBanner.className = 'w-full max-w-lg p-3 rounded-xl border flex items-center justify-between text-xs bg-zinc-900 border-zinc-800';
+        bannerIconWrapper.className = 'w-7 h-7 rounded-lg flex items-center justify-center bg-zinc-800 text-zinc-400';
+        bannerStatusIcon.className = 'fa-solid fa-cloud';
+        bannerTitle.textContent = 'Belum Diunggah ke Drive';
+        bannerSubtitle.textContent = 'Klik tombol di bawah untuk unggah';
+        btnManualUploadText.textContent = 'Unggah ke Drive';
+        btnManualUploadDrive.disabled = false;
+      }
+    }
+
+    btnClosePhotoModal.addEventListener('click', () => modalPhotoView.classList.add('hidden'));
+
+    btnDeleteCurrentPhoto.addEventListener('click', () => {
+      const idx = state.photos.findIndex(p => p.id === state.activePhotoId);
+      if (idx !== -1) {
+        state.photos.splice(idx, 1);
+        modalPhotoView.classList.add('hidden');
+        updateGalleryUI();
+        showToast('Foto berhasil dihapus.');
+      }
+    });
+
+    btnManualUploadDrive.addEventListener('click', () => {
+      const photo = state.photos.find(p => p.id === state.activePhotoId);
+      if (photo) uploadPhotoToDrive(photo);
+    });
+
+    function downloadAllPhotos() {
+      if (state.photos.length === 0) {
+        showToast('Belum ada foto yang diambil.', 'error');
+        return;
+      }
+      state.photos.forEach((photo, idx) => {
+        setTimeout(() => {
+          const a = document.createElement('a');
+          a.href = photo.dataUrl;
+          a.download = photo.fileName;
+          a.click();
+        }, idx * 250);
+      });
+      showToast(`Mengunduh ${state.photos.length} foto ke folder perangkat...`);
+    }
+
+    btnDownloadAllBackup.addEventListener('click', downloadAllPhotos);
+    btnDownloadAllFromGallery.addEventListener('click', downloadAllPhotos);
+
+    /* ==========================================================
+       7. GOOGLE APPS SCRIPT GUIDE & CLIPBOARD
+       ========================================================== */
+    function openScriptGuide() {
+      modalScriptGuide.classList.remove('hidden');
+    }
+    btnOpenScriptGuide.addEventListener('click', openScriptGuide);
+    btnCloseScriptGuide.addEventListener('click', () => modalScriptGuide.classList.add('hidden'));
+    btnDoneScriptGuide.addEventListener('click', () => modalScriptGuide.classList.add('hidden'));
+
+    btnCopyGasCode.addEventListener('click', () => {
+      const code = gasCodeBlock.innerText;
+      const textArea = document.createElement('textarea');
+      textArea.value = code;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        btnCopyGasCode.innerHTML = '<i class="fa-solid fa-check text-emerald-400"></i> Tersalin!';
+        setTimeout(() => {
+          btnCopyGasCode.innerHTML = '<i class="fa-regular fa-copy"></i> Salin Kode Skrip';
+        }, 2000);
+        showToast('Kode Google Apps Script disalin ke papan klip!', 'success');
+      } catch (err) {
+        console.error('Copy error:', err);
+      }
+      document.body.removeChild(textArea);
+    });
+
+    /* ==========================================================
+       8. TOAST NOTIFICATION UTILITY
+       ========================================================== */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      let iconClass = 'fa-solid fa-circle-info text-sky-400';
+      let borderClass = 'border-zinc-700';
+
+      if (type === 'success') {
+        iconClass = 'fa-solid fa-circle-check text-emerald-400';
+        borderClass = 'border-emerald-600/50';
+      } else if (type === 'error') {
+        iconClass = 'fa-solid fa-triangle-exclamation text-rose-400';
+        borderClass = 'border-rose-600/50';
+      }
+
+      toast.className = `flex items-center gap-2.5 px-4 py-3 bg-zinc-900/95 backdrop-blur-md border ${borderClass} rounded-xl shadow-2xl text-xs text-zinc-100 animate-in fade-in slide-in-from-bottom duration-200 pointer-events-auto`;
+      toast.innerHTML = `<i class="${iconClass} text-sm"></i><span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(8px)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    /* ==========================================================
+       INITIAL SETUP
+       ========================================================== */
+    window.addEventListener('DOMContentLoaded', () => {
+      updateWebhookStatusUI();
+      renderWatermarkOverlay();
+      applyCameraTransform();
+      requestSensorPermissionIfNeeded();
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        startCamera();
+      }
+    });
+  </script>
+</body>
+</html>
